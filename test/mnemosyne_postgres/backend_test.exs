@@ -287,9 +287,7 @@ defmodule MnemosynePostgres.BackendTest do
       assert {:ok, candidates, _state} =
                Backend.find_candidates([:semantic], query_embedding, [], vf_config, [], state)
 
-      assert length(candidates) >= 1
-
-      [{first_node, first_score} | _] = candidates
+      assert [{first_node, first_score} | _] = candidates
       assert %Semantic{} = first_node
       assert is_float(first_score)
       assert first_score > 0.0
@@ -362,8 +360,7 @@ defmodule MnemosynePostgres.BackendTest do
                  state
                )
 
-      assert length(candidates) >= 1
-      [{_node, score}] = candidates
+      assert [{_node, score}] = candidates
       assert score > 0.0
     end
 

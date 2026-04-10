@@ -35,6 +35,7 @@ defmodule MnemosynePostgres.NodeSerializer do
     intent: Intent
   }
 
+  @doc "Converts a Mnemosyne node struct into a map suitable for `Repo.insert_all`."
   @spec to_row(struct(), String.t(), String.t()) :: map()
   def to_row(node, tenant_id, repo_id) do
     type = Mnemosyne.Graph.Node.node_type(node)
@@ -52,6 +53,7 @@ defmodule MnemosynePostgres.NodeSerializer do
     }
   end
 
+  @doc "Converts a DB row back into its corresponding Mnemosyne node struct."
   @spec from_row(map()) :: struct()
   def from_row(%{type: type_str} = row) do
     type = String.to_existing_atom(type_str)

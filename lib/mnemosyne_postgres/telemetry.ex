@@ -42,6 +42,7 @@ defmodule MnemosynePostgres.Telemetry do
 
   @prefix [:mnemosyne_postgres]
 
+  @doc "Wraps `fun` in a `:telemetry.span/3` under the `[:mnemosyne_postgres, event]` prefix."
   @spec span(atom(), map(), (-> {result, map()})) :: result when result: term()
   def span(event, metadata, fun) do
     :telemetry.span(@prefix ++ [event], metadata, fun)
