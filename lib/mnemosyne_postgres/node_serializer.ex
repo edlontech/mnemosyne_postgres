@@ -58,12 +58,11 @@ defmodule MnemosynePostgres.NodeSerializer do
     type = String.to_existing_atom(type_str)
     module = Map.fetch!(@type_to_module, type)
     fields = Map.fetch!(@data_fields, type)
-    {:ok, links} = Links.load(row.links)
 
     base = %{
       id: row.id,
       embedding: deserialize_embedding(row.embedding),
-      links: links,
+      links: deserialize_links(row.links),
       created_at: row.created_at
     }
 
@@ -82,6 +81,19 @@ defmodule MnemosynePostgres.NodeSerializer do
       {field, Map.get(data, Atom.to_string(field))}
     end)
   end
+
+  defp deserialize_links(links) when is_map(links) do
+    case Enum.at(links, 0) do
+      {key, _} when is_atom(key) ->
+        links
+
+      _ ->
+        {:ok, loaded} = Links.load(links)
+        loaded
+    end
+  end
+
+  defp deserialize_links(_), do: Mnemosyne.Graph.Edge.empty_links()
 
   defp deserialize_embedding(nil), do: nil
   defp deserialize_embedding(%Pgvector{} = vec), do: Pgvector.to_list(vec)
