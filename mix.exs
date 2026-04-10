@@ -20,7 +20,6 @@ defmodule MnemosynePostgres.MixProject do
     ]
   end
 
-  # Run "mix help compile.app" to learn about applications.
   def application do
     [
       extra_applications: [:logger],
@@ -40,7 +39,6 @@ defmodule MnemosynePostgres.MixProject do
     ]
   end
 
-  # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
       {:bandit, "~> 1.8", only: :dev, runtime: false},
@@ -61,6 +59,7 @@ defmodule MnemosynePostgres.MixProject do
       {:postgrex, ">= 0.0.0"},
       {:recode, "~> 0.8", only: [:dev], runtime: false},
       {:splode, "~> 0.3"},
+      {:sycophant, "~> 0.1", only: [:dev, :test]},
       {:telemetry, "~> 1.3"},
       {:tidewave, "~> 0.5", only: :dev, runtime: false},
       {:zoi, "~> 0.11"}
@@ -89,8 +88,35 @@ defmodule MnemosynePostgres.MixProject do
           "LICENSE"
         ]
       ],
-      groups_for_modules: [],
-      nest_modules_by_prefix: []
+      groups_for_modules: [
+        "Public API": [
+          MnemosynePostgres,
+          MnemosynePostgres.Backend
+        ],
+        Schemas: [
+          MnemosynePostgres.Schema.Node,
+          MnemosynePostgres.Schema.NodeMetadata
+        ],
+        Queries: [
+          ~r/MnemosynePostgres\.Queries\./
+        ],
+        Migrations: [
+          MnemosynePostgres.Migrations,
+          ~r/MnemosynePostgres\.Migrations\./
+        ],
+        Infrastructure: [
+          MnemosynePostgres.Application,
+          MnemosynePostgres.Telemetry,
+          MnemosynePostgres.NodeSerializer,
+          MnemosynePostgres.Ecto.Links
+        ]
+      ],
+      nest_modules_by_prefix: [
+        MnemosynePostgres.Schema,
+        MnemosynePostgres.Queries,
+        MnemosynePostgres.Migrations,
+        MnemosynePostgres.Ecto
+      ]
     ]
   end
 
@@ -98,7 +124,7 @@ defmodule MnemosynePostgres.MixProject do
   defp elixirc_paths(_), do: ["lib"]
 
   defp description() do
-    "A Pluggable, extensible, and performant agentic memory library for Elixir applications."
+    "PostgreSQL + pgvector backend for the Mnemosyne agentic memory library."
   end
 
   defp package() do

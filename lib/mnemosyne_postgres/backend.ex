@@ -34,7 +34,7 @@ defmodule MnemosynePostgres.Backend do
   alias MnemosynePostgres.Queries.NodeQueries
   alias MnemosynePostgres.Telemetry
 
-  @required_opts [:repo, :tenant_id, :repo_id]
+  @required_opts [:repo, :repo_id]
 
   @impl true
   def init(opts) do
@@ -42,7 +42,7 @@ defmodule MnemosynePostgres.Backend do
       {:ok,
        %{
          repo: opts[:repo],
-         tenant_id: opts[:tenant_id],
+         tenant_id: Keyword.get(opts, :tenant_id, "default"),
          repo_id: opts[:repo_id],
          prefix: Keyword.get(opts, :prefix, "mnemosyne_")
        }}

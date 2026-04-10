@@ -72,6 +72,16 @@ defmodule MnemosynePostgres.BackendTest do
       assert state.prefix == "mnemosyne_"
     end
 
+    test "defaults tenant_id to \"default\"" do
+      assert {:ok, state} =
+               Backend.init(
+                 repo: MnemosynePostgres.Repo,
+                 repo_id: @repo_id
+               )
+
+      assert state.tenant_id == "default"
+    end
+
     test "accepts custom prefix" do
       assert {:ok, state} =
                Backend.init(
@@ -85,15 +95,11 @@ defmodule MnemosynePostgres.BackendTest do
     end
 
     test "fails when repo is missing" do
-      assert {:error, _} = Backend.init(tenant_id: @tenant_id, repo_id: @repo_id)
-    end
-
-    test "fails when tenant_id is missing" do
-      assert {:error, _} = Backend.init(repo: MnemosynePostgres.Repo, repo_id: @repo_id)
+      assert {:error, _} = Backend.init(repo_id: @repo_id)
     end
 
     test "fails when repo_id is missing" do
-      assert {:error, _} = Backend.init(repo: MnemosynePostgres.Repo, tenant_id: @tenant_id)
+      assert {:error, _} = Backend.init(repo: MnemosynePostgres.Repo)
     end
   end
 
