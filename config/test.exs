@@ -6,4 +6,5 @@ config :mnemosyne_postgres, MnemosynePostgres.Repo,
   database: "mnemosyne_test",
   hostname: "localhost",
   pool: Ecto.Adapters.SQL.Sandbox,
-  pool_size: 30
+  pool_size: 30,
+  types: MnemosynePostgres.PostgrexTypes

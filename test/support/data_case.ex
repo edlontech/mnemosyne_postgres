@@ -24,6 +24,7 @@ defmodule MnemosynePostgres.DataCase do
       import Ecto.Changeset
       import Ecto.Query
       import MnemosynePostgres.DataCase
+      import MnemosynePostgres.Factory
     end
   end
 

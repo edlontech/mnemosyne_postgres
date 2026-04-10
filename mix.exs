@@ -49,6 +49,7 @@ defmodule MnemosynePostgres.MixProject do
       {:ecto, "~> 3.13"},
       {:ecto_sql, "~> 3.13"},
       {:ex_check, "~> 0.16", only: [:dev, :test], runtime: false},
+      {:ex_machina, "~> 2.8", only: :test},
       {:excoveralls, "~> 0.18", only: [:dev, :test]},
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:assert_eventually, "~> 1.0", only: :test},
