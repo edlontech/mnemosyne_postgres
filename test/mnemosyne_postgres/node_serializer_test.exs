@@ -289,9 +289,8 @@ defmodule MnemosynePostgres.NodeSerializerTest do
       row = NodeSerializer.to_row(node, @tenant_id, @repo_id)
 
       assert is_map(row.links)
-      assert row.links["membership"] |> is_list()
-      assert Enum.sort(row.links["membership"]) == ["node-a", "node-b"]
-      assert row.links["hierarchical"] == ["node-c"]
+      assert row.links.membership == MapSet.new(["node-a", "node-b"])
+      assert row.links.hierarchical == MapSet.new(["node-c"])
 
       result = NodeSerializer.from_row(row)
       assert result.links == node.links

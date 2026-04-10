@@ -39,7 +39,6 @@ defmodule MnemosynePostgres.NodeSerializer do
   def to_row(node, tenant_id, repo_id) do
     type = Mnemosyne.Graph.Node.node_type(node)
     fields = Map.fetch!(@data_fields, type)
-    {:ok, dumped_links} = Links.dump(node.links)
 
     %{
       id: node.id,
@@ -48,7 +47,7 @@ defmodule MnemosynePostgres.NodeSerializer do
       type: Atom.to_string(type),
       data: serialize_data(node, fields),
       embedding: node.embedding,
-      links: dumped_links,
+      links: node.links,
       created_at: node.created_at
     }
   end

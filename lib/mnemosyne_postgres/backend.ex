@@ -65,47 +65,53 @@ defmodule MnemosynePostgres.Backend do
     vf_module = Map.get(vf_config, :module, Mnemosyne.ValueFunction.Default)
     pgvector_query = Pgvector.new(query_embedding)
 
-    rows_by_type =
-      Enum.map(node_types, fn type ->
-        params = get_in(vf_config, [:params, type]) || %{}
-        top_k = Map.get(params, :top_k, 20)
-        limit = top_k * 2
+    try do
+      rows_by_type =
+        Enum.map(node_types, fn type ->
+          params = get_in(vf_config, [:params, type]) || %{}
+          top_k = Map.get(params, :top_k, 20)
+          limit = top_k * 2
 
-        rows = NodeQueries.vector_search(state, type, pgvector_query, limit) |> state.repo.all()
-        {type, rows}
-      end)
+          rows =
+            NodeQueries.vector_search(state, type, pgvector_query, limit) |> state.repo.all()
 
-    all_node_ids =
-      rows_by_type
-      |> Enum.flat_map(fn {_type, rows} -> Enum.map(rows, & &1.id) end)
-      |> Enum.uniq()
-
-    metadata_map = fetch_metadata_map(all_node_ids, state)
-
-    candidates =
-      Enum.flat_map(rows_by_type, fn {type, rows} ->
-        params = get_in(vf_config, [:params, type]) || %{}
-        threshold = Map.get(params, :threshold, 0.0)
-        top_k = Map.get(params, :top_k, 20)
-
-        rows
-        |> Enum.map(fn row ->
-          node = NodeSerializer.from_row(row)
-          emb = NodeProtocol.embedding(node)
-          relevance = compute_relevance(emb, query_embedding, tag_embeddings)
-          node_meta = Map.get(metadata_map, node.id)
-          score = vf_module.score(relevance, node, node_meta, params)
-          {node, score}
+          {type, rows}
         end)
-        |> Enum.filter(fn {_node, score} -> score >= threshold end)
-        |> Enum.sort_by(&elem(&1, 1), :desc)
-        |> Enum.take(top_k)
-      end)
 
-    deduped =
-      Enum.uniq_by(candidates, fn {node, _score} -> NodeProtocol.id(node) end)
+      all_node_ids =
+        rows_by_type
+        |> Enum.flat_map(fn {_type, rows} -> Enum.map(rows, & &1.id) end)
+        |> Enum.uniq()
 
-    {:ok, deduped, state}
+      metadata_map = fetch_metadata_map(all_node_ids, state)
+
+      candidates =
+        Enum.flat_map(rows_by_type, fn {type, rows} ->
+          params = get_in(vf_config, [:params, type]) || %{}
+          threshold = Map.get(params, :threshold, 0.0)
+          top_k = Map.get(params, :top_k, 20)
+
+          rows
+          |> Enum.map(fn row ->
+            node = NodeSerializer.from_row(row)
+            emb = NodeProtocol.embedding(node)
+            relevance = compute_relevance(emb, query_embedding, tag_embeddings)
+            node_meta = Map.get(metadata_map, node.id)
+            score = vf_module.score(relevance, node, node_meta, params)
+            {node, score}
+          end)
+          |> Enum.filter(fn {_node, score} -> score >= threshold end)
+          |> Enum.sort_by(&elem(&1, 1), :desc)
+          |> Enum.take(top_k)
+        end)
+
+      deduped =
+        Enum.uniq_by(candidates, fn {node, _score} -> NodeProtocol.id(node) end)
+
+      {:ok, deduped, state}
+    rescue
+      e -> {:error, storage_error(:find_candidates, e)}
+    end
   end
 
   @impl true
@@ -137,14 +143,18 @@ defmodule MnemosynePostgres.Backend do
 
   @impl true
   def get_nodes_by_type(node_types, state) do
-    nodes =
-      state
-      |> NodeQueries.scoped()
-      |> NodeQueries.by_types(node_types)
-      |> state.repo.all()
-      |> Enum.map(&NodeSerializer.from_row/1)
+    try do
+      nodes =
+        state
+        |> NodeQueries.scoped()
+        |> NodeQueries.by_types(node_types)
+        |> state.repo.all()
+        |> Enum.map(&NodeSerializer.from_row/1)
 
-    {:ok, nodes, state}
+      {:ok, nodes, state}
+    rescue
+      e -> {:error, storage_error(:get_nodes_by_type, e)}
+    end
   end
 
   @impl true
@@ -182,7 +192,6 @@ defmodule MnemosynePostgres.Backend do
     replace_fields = [
       :access_count,
       :last_accessed_at,
-      :created_at,
       :cumulative_reward,
       :reward_count
     ]
@@ -219,14 +228,9 @@ defmodule MnemosynePostgres.Backend do
   defp insert_nodes([], _state), do: :ok
 
   defp insert_nodes(additions, state) do
-    rows = Enum.map(additions, &node_to_insert_row(&1, state.tenant_id, state.repo_id))
+    rows = Enum.map(additions, &NodeSerializer.to_row(&1, state.tenant_id, state.repo_id))
     source = NodeQueries.source(state)
     state.repo.insert_all(source, rows)
-  end
-
-  defp node_to_insert_row(node, tenant_id, repo_id) do
-    row = NodeSerializer.to_row(node, tenant_id, repo_id)
-    %{row | links: node.links}
   end
 
   defp apply_links([], _state), do: :ok
@@ -279,17 +283,19 @@ defmodule MnemosynePostgres.Backend do
 
     rows =
       state
-      |> NodeQueries.base()
+      |> NodeQueries.scoped()
+      |> where([n], n.id not in ^deleted_ids)
+      |> select([n], {n.id, n.links})
       |> state.repo.all()
 
-    Enum.each(rows, fn row ->
+    Enum.each(rows, fn {node_id, links} ->
       cleaned =
-        Map.new(row.links, fn {edge_type, id_set} ->
+        Map.new(links, fn {edge_type, id_set} ->
           {edge_type, MapSet.difference(id_set, deleted_set)}
         end)
 
-      if cleaned != row.links do
-        from(n in source, where: n.id == ^row.id and n.tenant_id == ^state.tenant_id)
+      if cleaned != links do
+        from(n in source, where: n.id == ^node_id and n.tenant_id == ^state.tenant_id)
         |> state.repo.update_all(set: [links: cleaned])
       end
     end)
@@ -331,7 +337,6 @@ defmodule MnemosynePostgres.Backend do
     replace_fields = [
       :access_count,
       :last_accessed_at,
-      :created_at,
       :cumulative_reward,
       :reward_count
     ]
