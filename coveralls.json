@@ -1,0 +1,8 @@
+{
+  "skip_files": [
+    "lib/mnemosyne_postgres/application.ex",
+    "lib/mnemosyne_postgres/migrations.ex",
+    "lib/mnemosyne_postgres/migrations/v1.ex",
+    "test/support"
+  ]
+}

@@ -8,6 +8,7 @@ defmodule MnemosynePostgres.MixProject do
       package: package(),
       version: "0.1.0",
       elixir: "~> 1.19",
+      test_coverage: [tool: ExCoveralls],
       docs: docs(),
       dialyzer: [
         plt_core_path: "_plts/core"
