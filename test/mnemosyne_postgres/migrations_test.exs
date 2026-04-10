@@ -54,6 +54,21 @@ defmodule MnemosynePostgres.MigrationsTest do
       assert column_map["cumulative_reward"] == "double precision"
       assert column_map["reward_count"] == "integer"
     end
+
+    test "has a foreign key on node_id referencing mnemosyne_nodes" do
+      {:ok, %{rows: rows}} =
+        Repo.query("""
+        SELECT tc.constraint_name
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+          ON tc.constraint_name = kcu.constraint_name
+        WHERE tc.table_name = 'mnemosyne_node_metadata'
+          AND tc.constraint_type = 'FOREIGN KEY'
+          AND kcu.column_name = 'node_id'
+        """)
+
+      assert length(rows) == 1
+    end
   end
 
   describe "indexes" do

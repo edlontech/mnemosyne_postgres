@@ -19,6 +19,5 @@ defmodule MnemosynePostgres.Schema.Node do
     field :embedding, Pgvector.Ecto.Vector
     field :links, MnemosynePostgres.Ecto.Links, default: %{}
     field :created_at, :utc_datetime_usec
-    field :distance, :float, virtual: true
   end
 end

@@ -5,6 +5,20 @@ defmodule MnemosynePostgres.Backend do
   Persists knowledge graph nodes in a single polymorphic `nodes` table
   with JSONB data, vector embeddings, and JSONB link maps. Metadata
   is stored in a separate `node_metadata` table.
+
+  ## Telemetry
+
+  See `MnemosynePostgres.Telemetry` for the full list of events and their
+  metadata.
+
+  ## Error handling
+
+  Callbacks whose behaviour spec includes `{:error, ...}` returns
+  (`apply_changeset`, `delete_nodes`, `find_candidates`, `get_nodes_by_type`)
+  catch exceptions and return `{:error, StorageError.t()}`. Callbacks that
+  only define `{:ok, ...}` returns (`get_node`, `get_linked_nodes`,
+  `get_metadata`, `update_metadata`, `delete_metadata`) let exceptions
+  propagate, as the caller is expected to handle crashes via supervision.
   """
 
   @behaviour Mnemosyne.GraphBackend
@@ -18,6 +32,7 @@ defmodule MnemosynePostgres.Backend do
   alias MnemosynePostgres.NodeSerializer
   alias MnemosynePostgres.Queries.MetadataQueries
   alias MnemosynePostgres.Queries.NodeQueries
+  alias MnemosynePostgres.Telemetry
 
   @required_opts [:repo, :tenant_id, :repo_id]
 
@@ -36,94 +51,126 @@ defmodule MnemosynePostgres.Backend do
 
   @impl true
   def apply_changeset(changeset, state) do
-    state.repo.transaction(fn ->
-      insert_nodes(changeset.additions, state)
-      apply_links(changeset.links, state)
-      upsert_metadata(changeset.metadata, state)
+    metadata = %{tenant_id: state.tenant_id, repo_id: state.repo_id}
+
+    Telemetry.span(:apply_changeset, metadata, fn ->
+      result =
+        state.repo.transaction(fn ->
+          insert_nodes(changeset.additions, state)
+          apply_links(changeset.links, state)
+          upsert_metadata(changeset.metadata, state)
+        end)
+        |> case do
+          {:ok, _} -> {:ok, state}
+          {:error, reason} -> {:error, storage_error(:apply_changeset, reason)}
+        end
+
+      {result, %{nodes_inserted: length(changeset.additions)}}
     end)
-    |> case do
-      {:ok, _} -> {:ok, state}
-      {:error, reason} -> {:error, storage_error(:apply_changeset, reason)}
-    end
   end
 
   @impl true
   def delete_nodes(node_ids, state) when is_list(node_ids) do
-    state.repo.transaction(fn ->
-      clean_stale_links(node_ids, state)
-      delete_metadata_for_ids(node_ids, state)
-      delete_nodes_by_ids(node_ids, state)
+    metadata = %{
+      tenant_id: state.tenant_id,
+      repo_id: state.repo_id,
+      node_count: length(node_ids)
+    }
+
+    Telemetry.span(:delete_nodes, metadata, fn ->
+      result =
+        state.repo.transaction(fn ->
+          clean_stale_links(node_ids, state)
+          delete_metadata_for_ids(node_ids, state)
+          delete_nodes_by_ids(node_ids, state)
+        end)
+        |> case do
+          {:ok, _} -> {:ok, state}
+          {:error, reason} -> {:error, storage_error(:delete_nodes, reason)}
+        end
+
+      {result, %{}}
     end)
-    |> case do
-      {:ok, _} -> {:ok, state}
-      {:error, reason} -> {:error, storage_error(:delete_nodes, reason)}
-    end
   end
 
   @impl true
   def find_candidates(node_types, query_embedding, tag_embeddings, vf_config, _opts, state) do
-    vf_module = Map.get(vf_config, :module, Mnemosyne.ValueFunction.Default)
-    pgvector_query = Pgvector.new(query_embedding)
+    metadata = %{
+      node_types: node_types,
+      tenant_id: state.tenant_id,
+      repo_id: state.repo_id
+    }
 
-    try do
-      rows_by_type =
-        Enum.map(node_types, fn type ->
-          params = get_in(vf_config, [:params, type]) || %{}
-          top_k = Map.get(params, :top_k, 20)
-          limit = top_k * 2
+    Telemetry.span(:find_candidates, metadata, fn ->
+      vf_module = Map.get(vf_config, :module, Mnemosyne.ValueFunction.Default)
+      pgvector_query = Pgvector.new(query_embedding)
 
-          rows =
-            NodeQueries.vector_search(state, type, pgvector_query, limit) |> state.repo.all()
+      try do
+        rows_by_type =
+          Enum.map(node_types, fn type ->
+            params = get_in(vf_config, [:params, type]) || %{}
+            top_k = Map.get(params, :top_k, 20)
+            limit = top_k * 2
 
-          {type, rows}
-        end)
+            rows =
+              NodeQueries.vector_search(state, type, pgvector_query, limit)
+              |> state.repo.all()
 
-      all_node_ids =
-        rows_by_type
-        |> Enum.flat_map(fn {_type, rows} -> Enum.map(rows, & &1.id) end)
-        |> Enum.uniq()
-
-      metadata_map = fetch_metadata_map(all_node_ids, state)
-
-      candidates =
-        Enum.flat_map(rows_by_type, fn {type, rows} ->
-          params = get_in(vf_config, [:params, type]) || %{}
-          threshold = Map.get(params, :threshold, 0.0)
-          top_k = Map.get(params, :top_k, 20)
-
-          rows
-          |> Enum.map(fn row ->
-            node = NodeSerializer.from_row(row)
-            emb = NodeProtocol.embedding(node)
-            relevance = compute_relevance(emb, query_embedding, tag_embeddings)
-            node_meta = Map.get(metadata_map, node.id)
-            score = vf_module.score(relevance, node, node_meta, params)
-            {node, score}
+            {type, rows}
           end)
-          |> Enum.filter(fn {_node, score} -> score >= threshold end)
-          |> Enum.sort_by(&elem(&1, 1), :desc)
-          |> Enum.take(top_k)
-        end)
 
-      deduped =
-        Enum.uniq_by(candidates, fn {node, _score} -> NodeProtocol.id(node) end)
+        all_node_ids =
+          rows_by_type
+          |> Enum.flat_map(fn {_type, rows} -> Enum.map(rows, & &1.id) end)
+          |> Enum.uniq()
 
-      {:ok, deduped, state}
-    rescue
-      e -> {:error, storage_error(:find_candidates, e)}
-    end
+        metadata_map = fetch_metadata_map(all_node_ids, state)
+
+        candidates =
+          Enum.flat_map(rows_by_type, fn {type, rows} ->
+            params = get_in(vf_config, [:params, type]) || %{}
+            threshold = Map.get(params, :threshold, 0.0)
+            top_k = Map.get(params, :top_k, 20)
+
+            rows
+            |> Enum.map(fn row ->
+              node = NodeSerializer.from_row(row)
+              emb = NodeProtocol.embedding(node)
+              relevance = compute_relevance(emb, query_embedding, tag_embeddings)
+              node_meta = Map.get(metadata_map, node.id)
+              score = vf_module.score(relevance, node, node_meta, params)
+              {node, score}
+            end)
+            |> Enum.filter(fn {_node, score} -> score >= threshold end)
+            |> Enum.sort_by(&elem(&1, 1), :desc)
+            |> Enum.take(top_k)
+          end)
+
+        deduped =
+          Enum.uniq_by(candidates, fn {node, _score} -> NodeProtocol.id(node) end)
+
+        result = {:ok, deduped, state}
+        {result, %{candidate_count: length(deduped)}}
+      rescue
+        e -> {{:error, storage_error(:find_candidates, e)}, %{}}
+      end
+    end)
   end
 
   @impl true
   def get_node(id, state) do
-    row =
-      state
-      |> NodeQueries.base()
-      |> NodeQueries.by_ids([id])
-      |> state.repo.one()
+    metadata = %{tenant_id: state.tenant_id, repo_id: state.repo_id, node_id: id}
 
-    node = if row, do: NodeSerializer.from_row(row)
-    {:ok, node, state}
+    Telemetry.span(:get_node, metadata, fn ->
+      row =
+        state
+        |> NodeQueries.base()
+        |> NodeQueries.by_ids([id])
+        |> state.repo.one()
+
+      node = if row, do: NodeSerializer.from_row(row)
+      {{:ok, node, state}, %{}}
+    end)
   end
 
   @impl true
@@ -143,18 +190,26 @@ defmodule MnemosynePostgres.Backend do
 
   @impl true
   def get_nodes_by_type(node_types, state) do
-    try do
-      nodes =
-        state
-        |> NodeQueries.scoped()
-        |> NodeQueries.by_types(node_types)
-        |> state.repo.all()
-        |> Enum.map(&NodeSerializer.from_row/1)
+    metadata = %{
+      tenant_id: state.tenant_id,
+      repo_id: state.repo_id,
+      node_types: node_types
+    }
 
-      {:ok, nodes, state}
-    rescue
-      e -> {:error, storage_error(:get_nodes_by_type, e)}
-    end
+    Telemetry.span(:get_nodes_by_type, metadata, fn ->
+      try do
+        nodes =
+          state
+          |> NodeQueries.scoped()
+          |> NodeQueries.by_types(node_types)
+          |> state.repo.all()
+          |> Enum.map(&NodeSerializer.from_row/1)
+
+        {{:ok, nodes, state}, %{}}
+      rescue
+        e -> {{:error, storage_error(:get_nodes_by_type, e)}, %{}}
+      end
+    end)
   end
 
   @impl true
@@ -285,6 +340,21 @@ defmodule MnemosynePostgres.Backend do
       state
       |> NodeQueries.scoped()
       |> where([n], n.id not in ^deleted_ids)
+      |> where(
+        [n],
+        fragment(
+          """
+          EXISTS (
+            SELECT 1
+            FROM jsonb_each(?) AS e(k,v),
+                 jsonb_array_elements_text(e.v) AS elem
+            WHERE elem = ANY(?)
+          )
+          """,
+          n.links,
+          ^deleted_ids
+        )
+      )
       |> select([n], {n.id, n.links})
       |> state.repo.all()
 

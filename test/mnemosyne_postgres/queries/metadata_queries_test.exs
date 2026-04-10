@@ -6,6 +6,10 @@ defmodule MnemosynePostgres.Queries.MetadataQueriesTest do
   @state %{tenant_id: "t1", repo_id: "r1", prefix: "mnemosyne_"}
 
   setup do
+    insert(:node, id: "n1", tenant_id: "t1", repo_id: "r1")
+    insert(:node, id: "n2", tenant_id: "t1", repo_id: "r1")
+    insert(:node, id: "n3", tenant_id: "t2", repo_id: "r1")
+
     insert(:node_metadata, tenant_id: "t1", node_id: "n1", access_count: 5)
     insert(:node_metadata, tenant_id: "t1", node_id: "n2", access_count: 3)
     insert(:node_metadata, tenant_id: "t2", node_id: "n3", access_count: 1)

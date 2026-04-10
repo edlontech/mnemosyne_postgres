@@ -116,13 +116,11 @@ defmodule MnemosynePostgres.Queries.NodeQueriesTest do
       assert [%{id: "n1"}] = results
     end
 
-    test "populates the virtual distance field" do
+    test "returns nodes ordered by embedding proximity" do
       query_embedding = Pgvector.new([0.1, 0.2, 0.3])
       results = NodeQueries.vector_search(@state, :semantic, query_embedding, 10) |> Repo.all()
 
-      assert [%{distance: distance}] = results
-      assert is_float(distance)
-      assert distance >= 0.0
+      assert [%{id: "n1"}] = results
     end
 
     test "respects the limit parameter" do

@@ -25,7 +25,14 @@ defmodule MnemosynePostgres.Migrations.V1 do
 
     create table(metadata_table, primary_key: false) do
       add(:tenant_id, :text, null: false, primary_key: true)
-      add(:node_id, :text, null: false, primary_key: true)
+
+      add(
+        :node_id,
+        references(nodes_table, type: :text, column: :id, on_delete: :delete_all),
+        null: false,
+        primary_key: true
+      )
+
       add(:access_count, :integer, null: false, default: 0)
       add(:last_accessed_at, :timestamptz)
       add(:created_at, :timestamptz, null: false)

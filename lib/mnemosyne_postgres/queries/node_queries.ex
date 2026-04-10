@@ -34,8 +34,7 @@ defmodule MnemosynePostgres.Queries.NodeQueries do
       where: n.type == ^type_str,
       where: not is_nil(n.embedding),
       order_by: cosine_distance(n.embedding, ^query_embedding),
-      limit: ^limit,
-      select_merge: %{distance: cosine_distance(n.embedding, ^query_embedding)}
+      limit: ^limit
     )
   end
 end

@@ -446,9 +446,15 @@ defmodule MnemosynePostgres.BackendTest do
   end
 
   describe "metadata CRUD" do
-    test "update_metadata upserts entries" do
+    setup do
       state = init_backend()
+      node = make_semantic("node-1")
+      cs = %Changeset{additions: [node], links: [], metadata: %{}}
+      {:ok, state} = Backend.apply_changeset(cs, state)
+      %{state: state}
+    end
 
+    test "update_metadata upserts entries", %{state: state} do
       meta = %NodeMetadata{
         access_count: 10,
         last_accessed_at: ~U[2025-06-01 12:00:00.000000Z],
@@ -466,9 +472,7 @@ defmodule MnemosynePostgres.BackendTest do
       assert fetched.reward_count == 4
     end
 
-    test "update_metadata overwrites existing entries" do
-      state = init_backend()
-
+    test "update_metadata overwrites existing entries", %{state: state} do
       meta1 = NodeMetadata.new(access_count: 1, created_at: @created_at)
       {:ok, state} = Backend.update_metadata(%{"node-1" => meta1}, state)
 
@@ -479,15 +483,11 @@ defmodule MnemosynePostgres.BackendTest do
       assert result["node-1"].access_count == 99
     end
 
-    test "get_metadata returns empty map for unknown IDs" do
-      state = init_backend()
-
+    test "get_metadata returns empty map for unknown IDs", %{state: state} do
       assert {:ok, %{}, _} = Backend.get_metadata(["unknown"], state)
     end
 
-    test "delete_metadata removes entries" do
-      state = init_backend()
-
+    test "delete_metadata removes entries", %{state: state} do
       meta = NodeMetadata.new(created_at: @created_at)
       {:ok, state} = Backend.update_metadata(%{"node-1" => meta}, state)
       assert {:ok, state} = Backend.delete_metadata(["node-1"], state)
