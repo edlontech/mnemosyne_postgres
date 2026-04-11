@@ -11,7 +11,7 @@ Add `mnemosyne_postgres` to your list of dependencies in `mix.exs`:
 ```elixir
 def deps do
   [
-    {:mnemosyne_postgres, "~> 0.1.0"}
+    {:mnemosyne_postgres, "~> 0.1.0"} # x-release-please-version
   ]
 end
 ```
