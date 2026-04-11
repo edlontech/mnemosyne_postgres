@@ -38,7 +38,7 @@ defmodule MnemosynePostgres.Queries.NodeQueries do
   end
 
   @doc "Returns nodes ordered by cosine distance to the query embedding."
-  @spec vector_search(map(), atom(), Pgvector.t(), non_neg_integer()) :: Ecto.Query.t()
+  @spec vector_search(map(), atom(), %Pgvector{}, non_neg_integer()) :: Ecto.Query.t()
   def vector_search(state, type, query_embedding, limit) do
     type_str = Atom.to_string(type)
 

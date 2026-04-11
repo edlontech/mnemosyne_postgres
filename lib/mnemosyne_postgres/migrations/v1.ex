@@ -5,7 +5,7 @@ defmodule MnemosynePostgres.Migrations.V1 do
   @node_types ~w(semantic episodic procedural subgoal source tag intent)
 
   @doc "Runs the V1 up migration creating nodes and metadata tables."
-  @spec up(keyword()) :: :ok
+  @spec up(keyword()) :: [any()]
   def up(opts) do
     prefix = Keyword.get(opts, :prefix, "mnemosyne_")
     dimensions = Keyword.fetch!(opts, :embedding_dimensions)
@@ -48,7 +48,7 @@ defmodule MnemosynePostgres.Migrations.V1 do
   end
 
   @doc "Rolls back the V1 migration, dropping nodes and metadata tables."
-  @spec down(keyword()) :: :ok
+  @spec down(keyword()) :: map()
   def down(opts) do
     prefix = Keyword.get(opts, :prefix, "mnemosyne_")
 
