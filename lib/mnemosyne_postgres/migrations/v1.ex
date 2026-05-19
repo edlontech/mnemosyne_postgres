@@ -12,21 +12,21 @@ defmodule MnemosynePostgres.Migrations.V1 do
     nodes_table = :"#{prefix}nodes"
     metadata_table = :"#{prefix}node_metadata"
 
-    execute("CREATE EXTENSION IF NOT EXISTS vector")
+    execute "CREATE EXTENSION IF NOT EXISTS vector"
 
     create table(nodes_table, primary_key: false) do
-      add(:id, :text, primary_key: true, null: false)
-      add(:tenant_id, :text, null: false)
-      add(:repo_id, :text, null: false)
-      add(:type, :text, null: false)
-      add(:data, :jsonb, null: false, default: "{}")
-      add(:embedding, :"vector(#{dimensions})")
-      add(:links, :jsonb, null: false, default: "{}")
-      add(:created_at, :timestamptz, null: false)
+      add :id, :text, primary_key: true, null: false
+      add :tenant_id, :text, null: false
+      add :repo_id, :text, null: false
+      add :type, :text, null: false
+      add :data, :jsonb, null: false, default: "{}"
+      add :embedding, :"vector(#{dimensions})"
+      add :links, :jsonb, null: false, default: "{}"
+      add :created_at, :timestamptz, null: false
     end
 
     create table(metadata_table, primary_key: false) do
-      add(:tenant_id, :text, null: false, primary_key: true)
+      add :tenant_id, :text, null: false, primary_key: true
 
       add(
         :node_id,
@@ -35,14 +35,14 @@ defmodule MnemosynePostgres.Migrations.V1 do
         primary_key: true
       )
 
-      add(:access_count, :integer, null: false, default: 0)
-      add(:last_accessed_at, :timestamptz)
-      add(:created_at, :timestamptz, null: false)
-      add(:cumulative_reward, :float, null: false, default: 0.0)
-      add(:reward_count, :integer, null: false, default: 0)
+      add :access_count, :integer, null: false, default: 0
+      add :last_accessed_at, :timestamptz
+      add :created_at, :timestamptz, null: false
+      add :cumulative_reward, :float, null: false, default: 0.0
+      add :reward_count, :integer, null: false, default: 0
     end
 
-    create(index(nodes_table, [:tenant_id, :repo_id, :type]))
+    create index(nodes_table, [:tenant_id, :repo_id, :type])
 
     create_vector_indexes(nodes_table, opts)
   end
@@ -52,15 +52,15 @@ defmodule MnemosynePostgres.Migrations.V1 do
   def down(opts) do
     prefix = Keyword.get(opts, :prefix, "mnemosyne_")
 
-    drop_if_exists(table(:"#{prefix}node_metadata"))
-    drop_if_exists(table(:"#{prefix}nodes"))
+    drop_if_exists table(:"#{prefix}node_metadata")
+    drop_if_exists table(:"#{prefix}nodes")
   end
 
   defp create_vector_indexes(table_name, opts) do
     index_type = Keyword.get(opts, :index_type, :hnsw)
 
     for node_type <- @node_types do
-      execute(vector_index_sql(table_name, node_type, index_type, opts))
+      execute vector_index_sql(table_name, node_type, index_type, opts)
     end
   end
 

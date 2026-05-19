@@ -109,6 +109,6 @@ defmodule MnemosynePostgres.Migrations do
 
   defp set_version(prefix, version) do
     table_name = "#{prefix}nodes"
-    execute("COMMENT ON TABLE #{table_name} IS '#{version}'")
+    execute "COMMENT ON TABLE #{table_name} IS '#{version}'"
   end
 end
