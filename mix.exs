@@ -6,7 +6,7 @@ defmodule MnemosynePostgres.MixProject do
       app: :mnemosyne_postgres,
       description: description(),
       package: package(),
-      version: "0.1.0",
+      version: "0.1.1",
       elixir: "~> 1.19",
       test_coverage: [tool: ExCoveralls],
       docs: docs(),
